@@ -94,10 +94,19 @@
                     // Re-render current view to show peer data
                     var questionContainer = document.getElementById('question-container');
                     if (questionContainer.style.display !== 'none') {
-                        // Currently viewing questions - need to re-render them to show peer data
-                        var currentLesson = questionContainer.querySelector('h2');
-                        if (currentLesson) {
-                            self.setupAnswerChoiceListeners();
+                        // Currently viewing questions - force complete re-render
+                        var currentHeader = questionContainer.querySelector('h2');
+                        if (currentHeader) {
+                            var headerText = currentHeader.textContent;
+                            console.log("Re-rendering questions after peer data load:", headerText);
+
+                            // Extract unit and lesson from header like "Unit 1 - Lesson 2"
+                            var matches = headerText.match(/Unit (\d+) - Lesson (\d+)/);
+                            if (matches) {
+                                var unitId = matches[1];
+                                var lessonId = matches[2];
+                                self.selectLesson(unitId, lessonId);
+                            }
                         }
                     }
                 } else {
@@ -396,7 +405,8 @@
             if (question.attachments.table) {
                 questionHtml += this.renderTable(question.attachments.table);
             }
-            if (question.attachments.chartData) {
+            // Check for chart data (chartType indicates a chart is present)
+            if (question.attachments.chartType || question.attachments.charts) {
                 questionHtml += '<div class="chart-container" id="chart-container-' + question.id + '" data-chart-id="' + question.id + '_chart"></div>';
             }
         }
@@ -456,10 +466,18 @@
     };
 
     App.prototype.renderPeerData = function(questionId) {
-        var peerData = this.fileManager.currentData.peerData;
-        if (!peerData || Object.keys(peerData).length === 0) {
+        if (!this.fileManager.currentData || !this.fileManager.currentData.peerData) {
+            console.log("No peer data available for question", questionId);
             return '';
         }
+
+        var peerData = this.fileManager.currentData.peerData;
+        if (!peerData || Object.keys(peerData).length === 0) {
+            console.log("Peer data is empty for question", questionId);
+            return '';
+        }
+
+        console.log("Rendering peer data for question", questionId, "with", Object.keys(peerData).length, "peers");
 
         var peerAnswers = [];
         var answerCounts = {};
@@ -467,8 +485,12 @@
         // Collect peer answers for this question
         Object.keys(peerData).forEach(function(username) {
             var studentData = peerData[username];
+            console.log("Checking peer:", username, "data:", studentData);
+
             if (studentData.answers && studentData.answers[questionId]) {
                 var answer = studentData.answers[questionId];
+                console.log("Found answer for", username, ":", answer);
+
                 peerAnswers.push({
                     username: username,
                     value: answer.value,
@@ -480,6 +502,8 @@
                     answerCounts[answer.value] = 0;
                 }
                 answerCounts[answer.value]++;
+            } else {
+                console.log("No answer found for", username, "on question", questionId);
             }
         });
 
@@ -543,14 +567,15 @@
                 });
             });
 
-            if (question && question.attachments && question.attachments.chartData) {
+            if (question && question.attachments && (question.attachments.chartType || question.attachments.charts)) {
                 try {
                     // Use the golden renderChart function with the actual DOM element
-                    window.Charting.renderChart(container, question.attachments.chartData);
+                    // Pass the entire attachments object as the chart data
+                    window.Charting.renderChart(container, question.attachments);
                     console.log("Chart rendered for question:", questionId);
                 } catch (error) {
                     console.error("Error rendering chart for question", questionId, ":", error);
-                    container.innerHTML = '<p class="error">Error rendering chart</p>';
+                    container.innerHTML = '<p class="error">Error rendering chart: ' + error.message + '</p>';
                 }
             }
         });
@@ -641,15 +666,15 @@
         });
 
         // Re-render any charts for this question
-        if (question.attachments && question.attachments.chartData) {
+        if (question.attachments && (question.attachments.chartType || question.attachments.charts)) {
             var chartContainer = newQuestionElement.querySelector('[data-chart-id]');
             if (chartContainer) {
                 try {
-                    window.Charting.renderChart(chartContainer, question.attachments.chartData);
+                    window.Charting.renderChart(chartContainer, question.attachments);
                     console.log("Chart re-rendered for question:", questionId);
                 } catch (error) {
                     console.error("Error re-rendering chart for question", questionId, ":", error);
-                    chartContainer.innerHTML = '<p class="error">Error rendering chart</p>';
+                    chartContainer.innerHTML = '<p class="error">Error rendering chart: ' + error.message + '</p>';
                 }
             }
         }
