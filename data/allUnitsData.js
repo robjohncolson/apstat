@@ -1,6 +1,6 @@
 // allUnitsData.js
 
-const ALL_UNITS_DATA = [
+var ALL_UNITS_DATA = [
   {
     unitId: 'unit1',
     displayName: "Unit 1: Exploring One-Variable Data", // Added/Updated

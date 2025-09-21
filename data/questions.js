@@ -1,4 +1,4 @@
-const EMBEDDED_CURRICULUM = [
+var EMBEDDED_CURRICULUM = [
     {
       "id": "U1-L2-Q01",
       "type": "multiple-choice",
