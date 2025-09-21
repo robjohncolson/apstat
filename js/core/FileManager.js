@@ -204,6 +204,82 @@
         return { completed: completed, total: total, percent: percent };
     };
 
+    FileManager.prototype.saveAnswer = function(questionId, value, reasoning) {
+        if (!this.currentData) {
+            console.error("saveAnswer: No current data loaded. Cannot save answer.");
+            return false;
+        }
+
+        if (!this.currentData.personalData) {
+            this.currentData.personalData = { answers: {} };
+        }
+
+        if (!this.currentData.personalData.answers) {
+            this.currentData.personalData.answers = {};
+        }
+
+        reasoning = reasoning || '';
+
+        var answerEntry = {
+            value: value,
+            timestamp: new Date().toISOString()
+        };
+
+        if (reasoning) {
+            answerEntry.reasoning = reasoning;
+        }
+
+        this.currentData.personalData.answers[questionId] = answerEntry;
+
+        console.log("Answer saved for question", questionId + ":", value);
+
+        this.markDirty(true);
+
+        return true;
+    };
+
+    FileManager.prototype.importPeerData = function(masterData) {
+        if (!this.currentData) {
+            console.error("importPeerData: No current data loaded. Cannot import peer data.");
+            return false;
+        }
+
+        if (!masterData) {
+            console.error("importPeerData: No master data provided.");
+            return false;
+        }
+
+        // Extract the students/users object from the master data
+        var peerData = null;
+
+        if (masterData.students) {
+            // New format with 'students' property
+            peerData = masterData.students;
+        } else if (masterData.users) {
+            // Legacy format with 'users' property
+            peerData = masterData.users;
+        } else {
+            console.error("importPeerData: Master data does not contain 'students' or 'users' property.");
+            return false;
+        }
+
+        // Store the peer data (excluding the current user to avoid duplication)
+        this.currentData.peerData = {};
+        var currentUsername = this.currentUsername;
+
+        Object.keys(peerData).forEach(function(username) {
+            if (username !== currentUsername) {
+                this.currentData.peerData[username] = peerData[username];
+            }
+        }, this);
+
+        console.log("Peer data imported for", Object.keys(this.currentData.peerData).length, "students.");
+
+        this.markDirty(true);
+
+        return true;
+    };
+
     window.FileManager = FileManager;
 
 })(window);

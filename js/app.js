@@ -26,6 +26,7 @@
         document.getElementById('new-file-btn').addEventListener('click', function() { self.handleNewFile(); });
         document.getElementById('load-file-btn').addEventListener('click', function() { self.handleLoadFile(); });
         document.getElementById('save-file-btn').addEventListener('click', function() { self.handleSaveFile(); });
+        document.getElementById('load-peer-btn').addEventListener('click', function() { self.handleLoadPeerData(); });
 
         var fileInput = document.getElementById('file-input');
         fileInput.addEventListener('change', function(e) {
@@ -37,6 +38,14 @@
                 }).catch(function(err){
                     console.error("File loading failed in App.", err);
                 });
+            }
+        });
+
+        var peerFileInput = document.getElementById('peer-file-input');
+        peerFileInput.addEventListener('change', function(e) {
+            var file = e.target.files[0];
+            if (file) {
+                self.loadPeerDataFile(file);
             }
         });
 
@@ -59,6 +68,53 @@
 
     App.prototype.handleSaveFile = function() {
         this.fileManager.saveFile();
+    };
+
+    App.prototype.handleLoadPeerData = function() {
+        if (!this.fileManager.currentData) {
+            alert("Please load a student file first before importing peer data.");
+            return;
+        }
+        document.getElementById('peer-file-input').click();
+    };
+
+    App.prototype.loadPeerDataFile = function(file) {
+        var self = this;
+        var reader = new FileReader();
+
+        reader.onload = function(e) {
+            try {
+                var masterData = JSON.parse(e.target.result);
+                var success = self.fileManager.importPeerData(masterData);
+
+                if (success) {
+                    alert("Peer data loaded successfully!");
+                    console.log("Peer data import completed.");
+
+                    // Re-render current view to show peer data
+                    var questionContainer = document.getElementById('question-container');
+                    if (questionContainer.style.display !== 'none') {
+                        // Currently viewing questions - need to re-render them to show peer data
+                        var currentLesson = questionContainer.querySelector('h2');
+                        if (currentLesson) {
+                            self.setupAnswerChoiceListeners();
+                        }
+                    }
+                } else {
+                    alert("Failed to import peer data. Please check the file format.");
+                }
+            } catch (error) {
+                console.error("Error parsing peer data file:", error);
+                alert("Failed to read the peer data file. Please ensure it's a valid JSON file.");
+            }
+        };
+
+        reader.onerror = function() {
+            console.error("FileReader error while loading peer data.");
+            alert("An error occurred while reading the peer data file.");
+        };
+
+        reader.readAsText(file);
     };
 
     App.prototype.updateUI = function(status) {
@@ -301,6 +357,9 @@
             self.showLessonSelector(unitId);
         });
 
+        // Add event listeners for answer choices
+        this.setupAnswerChoiceListeners();
+
         // Render any charts that might be present
         this.renderCharts();
 
@@ -338,7 +397,7 @@
                 questionHtml += this.renderTable(question.attachments.table);
             }
             if (question.attachments.chartData) {
-                questionHtml += '<div class="chart-container" data-chart-id="' + question.id + '_chart"></div>';
+                questionHtml += '<div class="chart-container" id="chart-container-' + question.id + '" data-chart-id="' + question.id + '_chart"></div>';
             }
         }
 
@@ -354,6 +413,11 @@
                     '</div>';
             });
             questionHtml += '</div>';
+        }
+
+        // Render peer data if available
+        if (this.fileManager.currentData && this.fileManager.currentData.peerData) {
+            questionHtml += this.renderPeerData(question.id);
         }
 
         questionHtml += '</div>';
@@ -391,6 +455,75 @@
         return tableHtml;
     };
 
+    App.prototype.renderPeerData = function(questionId) {
+        var peerData = this.fileManager.currentData.peerData;
+        if (!peerData || Object.keys(peerData).length === 0) {
+            return '';
+        }
+
+        var peerAnswers = [];
+        var answerCounts = {};
+
+        // Collect peer answers for this question
+        Object.keys(peerData).forEach(function(username) {
+            var studentData = peerData[username];
+            if (studentData.answers && studentData.answers[questionId]) {
+                var answer = studentData.answers[questionId];
+                peerAnswers.push({
+                    username: username,
+                    value: answer.value,
+                    reasoning: answer.reasoning || ''
+                });
+
+                // Count answer distribution
+                if (!answerCounts[answer.value]) {
+                    answerCounts[answer.value] = 0;
+                }
+                answerCounts[answer.value]++;
+            }
+        });
+
+        if (peerAnswers.length === 0) {
+            return '';
+        }
+
+        var peerHtml = '<div class="peer-data-section">';
+        peerHtml += '<h4>Peer Responses (' + peerAnswers.length + ' students)</h4>';
+
+        // Answer distribution
+        peerHtml += '<div class="answer-distribution">';
+        peerHtml += '<h5>Answer Distribution:</h5>';
+        var sortedChoices = Object.keys(answerCounts).sort();
+        sortedChoices.forEach(function(choice) {
+            var count = answerCounts[choice];
+            var percentage = Math.round((count / peerAnswers.length) * 100);
+            peerHtml += '<div class="distribution-item">';
+            peerHtml += '<span class="choice-label">' + choice + ':</span>';
+            peerHtml += '<span class="choice-count">' + count + ' (' + percentage + '%)</span>';
+            peerHtml += '<div class="distribution-bar">';
+            peerHtml += '<div class="distribution-fill" style="width: ' + percentage + '%"></div>';
+            peerHtml += '</div>';
+            peerHtml += '</div>';
+        });
+        peerHtml += '</div>';
+
+        // Individual peer responses
+        peerHtml += '<div class="peer-responses">';
+        peerHtml += '<h5>Individual Responses:</h5>';
+        peerAnswers.forEach(function(peer) {
+            peerHtml += '<div class="peer-response">';
+            peerHtml += '<strong>' + peer.username + ':</strong> ' + peer.value;
+            if (peer.reasoning) {
+                peerHtml += '<div class="peer-reasoning">"' + peer.reasoning + '"</div>';
+            }
+            peerHtml += '</div>';
+        });
+        peerHtml += '</div>';
+
+        peerHtml += '</div>';
+        return peerHtml;
+    };
+
     App.prototype.renderCharts = function() {
         var self = this;
         // Look for any chart containers and render charts using the golden renderChart function
@@ -412,7 +545,7 @@
 
             if (question && question.attachments && question.attachments.chartData) {
                 try {
-                    // Use the golden renderChart function
+                    // Use the golden renderChart function with the actual DOM element
                     window.Charting.renderChart(container, question.attachments.chartData);
                     console.log("Chart rendered for question:", questionId);
                 } catch (error) {
@@ -427,6 +560,101 @@
         document.getElementById('question-container').style.display = 'none';
         document.getElementById('lesson-selector').style.display = 'block';
         console.log("Returned to lesson selector for Unit", unitId);
+    };
+
+    App.prototype.setupAnswerChoiceListeners = function() {
+        var self = this;
+        var choiceItems = document.querySelectorAll('.choice-item');
+
+        choiceItems.forEach(function(choiceItem) {
+            choiceItem.addEventListener('click', function() {
+                var questionId = this.closest('.question-item').getAttribute('data-question-id');
+                var selectedChoice = this.getAttribute('data-choice');
+
+                self.submitAnswer(questionId, selectedChoice);
+            });
+        });
+
+        console.log("Answer choice listeners set up for", choiceItems.length, "choices.");
+    };
+
+    App.prototype.submitAnswer = function(questionId, selectedChoice) {
+        var self = this;
+
+        console.log("Submitting answer for question", questionId + ":", selectedChoice);
+
+        // Save the answer via FileManager
+        var success = this.fileManager.saveAnswer(questionId, selectedChoice, '');
+
+        if (success) {
+            // Re-render the specific question to update its visual state
+            this.updateQuestionDisplay(questionId);
+
+            console.log("Answer submitted successfully for", questionId);
+        } else {
+            console.error("Failed to save answer for", questionId);
+            alert("Failed to save answer. Please ensure you have a file loaded.");
+        }
+    };
+
+    App.prototype.updateQuestionDisplay = function(questionId) {
+        var self = this;
+        var questionElement = document.querySelector('[data-question-id="' + questionId + '"]');
+
+        if (!questionElement) {
+            console.error("Question element not found for", questionId);
+            return;
+        }
+
+        // Find the question data
+        var organizedCurriculum = this.fileManager.getOrganizedCurriculum();
+        var question = null;
+
+        Object.keys(organizedCurriculum).forEach(function(unitNum) {
+            organizedCurriculum[unitNum].questions.forEach(function(q) {
+                if (q.id === questionId) {
+                    question = q;
+                }
+            });
+        });
+
+        if (!question) {
+            console.error("Question data not found for", questionId);
+            return;
+        }
+
+        // Re-render just this question
+        var updatedQuestionHtml = this.renderQuestion(question);
+        questionElement.outerHTML = updatedQuestionHtml;
+
+        // Re-attach event listeners for this question's choices
+        var newQuestionElement = document.querySelector('[data-question-id="' + questionId + '"]');
+        var choiceItems = newQuestionElement.querySelectorAll('.choice-item');
+
+        choiceItems.forEach(function(choiceItem) {
+            choiceItem.addEventListener('click', function() {
+                var questionId = this.closest('.question-item').getAttribute('data-question-id');
+                var selectedChoice = this.getAttribute('data-choice');
+
+                self.submitAnswer(questionId, selectedChoice);
+            });
+        });
+
+        // Re-render any charts for this question
+        if (question.attachments && question.attachments.chartData) {
+            var chartContainer = newQuestionElement.querySelector('[data-chart-id]');
+            if (chartContainer) {
+                try {
+                    window.Charting.renderChart(chartContainer, question.attachments.chartData);
+                    console.log("Chart re-rendered for question:", questionId);
+                } catch (error) {
+                    console.error("Error re-rendering chart for question", questionId, ":", error);
+                    chartContainer.innerHTML = '<p class="error">Error rendering chart</p>';
+                }
+            }
+        }
+
+        console.log("Question display updated for", questionId);
     };
 
     App.prototype.showUnitMenu = function() {
