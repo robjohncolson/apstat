@@ -231,12 +231,202 @@
             card.addEventListener('click', function() {
                 var unitId = this.getAttribute('data-unit-id');
                 var lessonId = this.getAttribute('data-lesson-id');
-                alert('Clicked on Unit ' + unitId + ', Lesson ' + lessonId + '. Question display coming next!');
-                // self.selectLesson(unitId, lessonId); // This will be Phase 3
+                self.selectLesson(unitId, lessonId);
             });
         });
 
         console.log("Lesson selector rendered for Unit", unitId, "with", lessons.length, "lessons.");
+    };
+
+    App.prototype.selectLesson = function(unitId, lessonId) {
+        var self = this;
+        console.log("Lesson selected: Unit", unitId, "Lesson", lessonId);
+
+        // Hide lesson selector and show question container
+        document.getElementById('lesson-selector').style.display = 'none';
+        document.getElementById('question-container').style.display = 'block';
+
+        // Get questions for this lesson
+        var organizedCurriculum = this.fileManager.getOrganizedCurriculum();
+        var unitData = organizedCurriculum[unitId];
+
+        if (!unitData) {
+            console.error("Unit data not found for unit:", unitId);
+            return;
+        }
+
+        var lessonQuestions = [];
+        unitData.questions.forEach(function(question) {
+            var idParts = question.id.split('-');
+            if (idParts.length >= 2) {
+                var qLessonNum = idParts[1].replace('L', '');
+                if (qLessonNum === lessonId) {
+                    lessonQuestions.push(question);
+                }
+            }
+        });
+
+        // Sort questions by question number
+        lessonQuestions.sort(function(a, b) {
+            var aNum = parseInt(a.id.split('-')[2].replace('Q', ''));
+            var bNum = parseInt(b.id.split('-')[2].replace('Q', ''));
+            return aNum - bNum;
+        });
+
+        this.renderQuestionsForLesson(unitId, lessonId, lessonQuestions);
+    };
+
+    App.prototype.renderQuestionsForLesson = function(unitId, lessonId, questions) {
+        var self = this;
+        var questionContainer = document.getElementById('question-container');
+        var organizedCurriculum = this.fileManager.getOrganizedCurriculum();
+        var unitName = organizedCurriculum[unitId].unitInfo.displayName || organizedCurriculum[unitId].unitInfo.name;
+
+        var questionsHtml = '';
+        questions.forEach(function(question) {
+            questionsHtml += self.renderQuestion(question);
+        });
+
+        questionContainer.innerHTML =
+            '<div class="question-overview">' +
+                '<div class="question-header-section">' +
+                    '<button id="back-to-lessons-btn" class="back-button">← Back to Lessons</button>' +
+                    '<h2>' + unitName + ' - Lesson ' + lessonId + '</h2>' +
+                '</div>' +
+                '<div class="questions-list">' + questionsHtml + '</div>' +
+            '</div>';
+
+        // Add event listener for back button
+        document.getElementById('back-to-lessons-btn').addEventListener('click', function() {
+            self.showLessonSelector(unitId);
+        });
+
+        // Render any charts that might be present
+        this.renderCharts();
+
+        console.log("Questions rendered for Unit", unitId, "Lesson", lessonId, ":", questions.length, "questions.");
+    };
+
+    App.prototype.renderQuestion = function(question) {
+        var self = this;
+        var currentAnswer = '';
+
+        // Get current answer if available
+        if (this.fileManager.currentData && this.fileManager.currentData.personalData.answers) {
+            var answer = this.fileManager.currentData.personalData.answers[question.id];
+            if (answer && answer.value) {
+                currentAnswer = answer.value;
+            }
+        }
+
+        var questionHtml = '<div class="question-item" data-question-id="' + question.id + '">';
+
+        // Question header
+        questionHtml += '<div class="question-header">';
+        questionHtml += '<h3>' + question.id + '</h3>';
+        if (currentAnswer) {
+            questionHtml += '<span class="answer-indicator">Answered: ' + currentAnswer + '</span>';
+        }
+        questionHtml += '</div>';
+
+        // Question prompt
+        questionHtml += '<div class="question-prompt">' + question.prompt + '</div>';
+
+        // Handle attachments (tables, charts, etc.)
+        if (question.attachments) {
+            if (question.attachments.table) {
+                questionHtml += this.renderTable(question.attachments.table);
+            }
+            if (question.attachments.chartData) {
+                questionHtml += '<div class="chart-container" data-chart-id="' + question.id + '_chart"></div>';
+            }
+        }
+
+        // Render answer choices for multiple choice questions
+        if (question.type === 'multiple-choice' && question.attachments && question.attachments.choices) {
+            questionHtml += '<div class="answer-choices">';
+            question.attachments.choices.forEach(function(choice) {
+                var isSelected = choice.key === currentAnswer ? 'selected' : '';
+                questionHtml +=
+                    '<div class="choice-item ' + isSelected + '" data-choice="' + choice.key + '">' +
+                        '<span class="choice-key">' + choice.key + '.</span>' +
+                        '<span class="choice-value">' + choice.value + '</span>' +
+                    '</div>';
+            });
+            questionHtml += '</div>';
+        }
+
+        questionHtml += '</div>';
+        return questionHtml;
+    };
+
+    App.prototype.renderTable = function(tableData) {
+        if (!tableData || !Array.isArray(tableData) || tableData.length === 0) {
+            return '';
+        }
+
+        var tableHtml = '<div class="data-table-container"><table class="data-table">';
+
+        // Header row
+        if (tableData.length > 0) {
+            tableHtml += '<thead><tr>';
+            tableData[0].forEach(function(header) {
+                tableHtml += '<th>' + header + '</th>';
+            });
+            tableHtml += '</tr></thead>';
+        }
+
+        // Data rows
+        tableHtml += '<tbody>';
+        for (var i = 1; i < tableData.length; i++) {
+            tableHtml += '<tr>';
+            tableData[i].forEach(function(cell) {
+                tableHtml += '<td>' + cell + '</td>';
+            });
+            tableHtml += '</tr>';
+        }
+        tableHtml += '</tbody>';
+
+        tableHtml += '</table></div>';
+        return tableHtml;
+    };
+
+    App.prototype.renderCharts = function() {
+        var self = this;
+        // Look for any chart containers and render charts using the golden renderChart function
+        var chartContainers = document.querySelectorAll('[data-chart-id]');
+        chartContainers.forEach(function(container) {
+            var chartId = container.getAttribute('data-chart-id');
+            var questionId = chartId.replace('_chart', '');
+
+            // Find the question data
+            var organizedCurriculum = self.fileManager.getOrganizedCurriculum();
+            var question = null;
+            Object.keys(organizedCurriculum).forEach(function(unitNum) {
+                organizedCurriculum[unitNum].questions.forEach(function(q) {
+                    if (q.id === questionId) {
+                        question = q;
+                    }
+                });
+            });
+
+            if (question && question.attachments && question.attachments.chartData) {
+                try {
+                    // Use the golden renderChart function
+                    window.Charting.renderChart(container, question.attachments.chartData);
+                    console.log("Chart rendered for question:", questionId);
+                } catch (error) {
+                    console.error("Error rendering chart for question", questionId, ":", error);
+                    container.innerHTML = '<p class="error">Error rendering chart</p>';
+                }
+            }
+        });
+    };
+
+    App.prototype.showLessonSelector = function(unitId) {
+        document.getElementById('question-container').style.display = 'none';
+        document.getElementById('lesson-selector').style.display = 'block';
+        console.log("Returned to lesson selector for Unit", unitId);
     };
 
     App.prototype.showUnitMenu = function() {
