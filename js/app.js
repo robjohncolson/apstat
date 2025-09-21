@@ -467,17 +467,13 @@
 
     App.prototype.renderPeerData = function(questionId) {
         if (!this.fileManager.currentData || !this.fileManager.currentData.peerData) {
-            console.log("No peer data available for question", questionId);
             return '';
         }
 
         var peerData = this.fileManager.currentData.peerData;
         if (!peerData || Object.keys(peerData).length === 0) {
-            console.log("Peer data is empty for question", questionId);
             return '';
         }
-
-        console.log("Rendering peer data for question", questionId, "with", Object.keys(peerData).length, "peers");
 
         var peerAnswers = [];
         var answerCounts = {};
@@ -485,11 +481,9 @@
         // Collect peer answers for this question
         Object.keys(peerData).forEach(function(username) {
             var studentData = peerData[username];
-            console.log("Checking peer:", username, "data:", studentData);
 
             if (studentData.answers && studentData.answers[questionId]) {
                 var answer = studentData.answers[questionId];
-                console.log("Found answer for", username, ":", answer);
 
                 peerAnswers.push({
                     username: username,
@@ -502,8 +496,6 @@
                     answerCounts[answer.value] = 0;
                 }
                 answerCounts[answer.value]++;
-            } else {
-                console.log("No answer found for", username, "on question", questionId);
             }
         });
 
