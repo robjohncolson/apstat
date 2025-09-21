@@ -130,11 +130,120 @@
         unitMenuContainer.querySelectorAll('.unit-card').forEach(function(card) {
             card.addEventListener('click', function() {
                 var unitId = this.getAttribute('data-unit-id');
-                alert('Clicked on Unit ' + unitId + '. Lesson selection coming next!');
+                self.selectUnit(unitId);
             });
         });
 
         console.log("Unit menu rendered with", sortedUnitKeys.length, "units.");
+    };
+
+    App.prototype.selectUnit = function(unitId) {
+        var self = this;
+        console.log("Unit selected:", unitId);
+
+        // Hide unit menu and show lesson selector
+        document.getElementById('unit-menu').style.display = 'none';
+        document.getElementById('lesson-selector').style.display = 'block';
+
+        // Render the lesson selector for this unit
+        this.renderLessonSelector(unitId);
+    };
+
+    App.prototype.renderLessonSelector = function(unitId) {
+        var self = this;
+        var lessonSelectorContainer = document.getElementById('lesson-selector');
+        var organizedCurriculum = this.fileManager.getOrganizedCurriculum();
+        var unitData = organizedCurriculum[unitId];
+
+        if (!unitData) {
+            console.error("Unit data not found for unit:", unitId);
+            return;
+        }
+
+        var unitName = unitData.unitInfo.displayName || unitData.unitInfo.name;
+        var lessons = unitData.unitInfo.lessonNumbers;
+
+        // Group questions by lesson
+        var lessonQuestions = {};
+        unitData.questions.forEach(function(question) {
+            var idParts = question.id.split('-');
+            if (idParts.length >= 2) {
+                var lessonNum = idParts[1].replace('L', '');
+                if (!lessonQuestions[lessonNum]) {
+                    lessonQuestions[lessonNum] = [];
+                }
+                lessonQuestions[lessonNum].push(question);
+            }
+        });
+
+        // Build lesson buttons HTML
+        var lessonsHtml = '';
+        lessons.forEach(function(lessonNum) {
+            var questionCount = lessonQuestions[lessonNum] ? lessonQuestions[lessonNum].length : 0;
+            var completed = 0;
+
+            // Calculate completion for this lesson
+            if (self.fileManager.currentData && self.fileManager.currentData.personalData.answers) {
+                var answers = self.fileManager.currentData.personalData.answers;
+                if (lessonQuestions[lessonNum]) {
+                    lessonQuestions[lessonNum].forEach(function(q) {
+                        if (answers[q.id] !== undefined) {
+                            completed++;
+                        }
+                    });
+                }
+            }
+
+            var percent = questionCount > 0 ? Math.round((completed / questionCount) * 100) : 0;
+
+            lessonsHtml +=
+                '<div class="lesson-card" data-unit-id="' + unitId + '" data-lesson-id="' + lessonNum + '">' +
+                    '<div class="lesson-header">' +
+                        '<h4>Lesson ' + lessonNum + '</h4>' +
+                        '<span class="completion-badge">' + percent + '%</span>' +
+                    '</div>' +
+                    '<div class="lesson-stats">' +
+                        '<span>' + questionCount + ' questions</span>' +
+                        '<span>•</span>' +
+                        '<span>' + completed + ' completed</span>' +
+                    '</div>' +
+                    '<div class="progress-bar">' +
+                        '<div class="progress-fill" style="width: ' + percent + '%"></div>' +
+                    '</div>' +
+                '</div>';
+        });
+
+        lessonSelectorContainer.innerHTML =
+            '<div class="lesson-overview">' +
+                '<div class="lesson-header-section">' +
+                    '<button id="back-to-units-btn" class="back-button">← Back to Units</button>' +
+                    '<h2>' + unitName + '</h2>' +
+                '</div>' +
+                '<div class="lessons-grid">' + lessonsHtml + '</div>' +
+            '</div>';
+
+        // Add event listeners
+        document.getElementById('back-to-units-btn').addEventListener('click', function() {
+            self.showUnitMenu();
+        });
+
+        lessonSelectorContainer.querySelectorAll('.lesson-card').forEach(function(card) {
+            card.addEventListener('click', function() {
+                var unitId = this.getAttribute('data-unit-id');
+                var lessonId = this.getAttribute('data-lesson-id');
+                alert('Clicked on Unit ' + unitId + ', Lesson ' + lessonId + '. Question display coming next!');
+                // self.selectLesson(unitId, lessonId); // This will be Phase 3
+            });
+        });
+
+        console.log("Lesson selector rendered for Unit", unitId, "with", lessons.length, "lessons.");
+    };
+
+    App.prototype.showUnitMenu = function() {
+        document.getElementById('lesson-selector').style.display = 'none';
+        document.getElementById('question-container').style.display = 'none';
+        document.getElementById('unit-menu').style.display = 'block';
+        console.log("Returned to unit menu.");
     };
 
     window.App = App;
